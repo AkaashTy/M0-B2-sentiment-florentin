@@ -19,6 +19,25 @@ from __future__ import annotations
 #   Règle retenue : ... étoiles -> négatif / ... -> neutre / ... -> positif
 #   Argument métier 1 : ...
 #   Argument métier 2 : ...
+# 
+# DECISION FFO
+# 
+# Situation : Hotel, propriétaire veut utiliser les avis client pour améliorer ses services
+# 
+# Comment les utilisateurs choisissent leur logement pour un séjour 
+# > Consultation des autres utilisateurs afin de déterminer si le lieu leur correspond
+# > Dans notre cas c'est le propriétaire qui consulte ses résultats pour ensuite les classer
+# > Les classer dans le but de régler les problèmes soulevés par les clients
+# > En partant de ce postulat, un avis 5★ peut être considéré comme 'parfait' car il y a la note maximale. et donc normalement pas de défauts à corriger
+# > Par contre un avis 4★ est certes bon mais peut permettre de soulever des petits problèmes qui persistent dans l'établissement. Des efforts minimes seront à surveiller afin de transformer ces 4★ en 5★
+# > Ensuite nous pouvons considérer que les autres avis 1★, 2★, 3★ sont eux les plus éloignés de la note parfaite et donc il y a plus d'effort a fournir de la part du propriétaire pour augmenter l'expérience client
+# > Ces trois premiers niveaux peuvent donc être considérés comme négatif par le propriétaire
+# 
+# Avec ce raisonnement on peut prévoir un très grand nombre de résultats négatifs.
+# Mais tous les avis classés comme tel auront un axe d'amélioration possible. 
+# 
+#   Règle retenue : 1★, 2★, 3★ étoiles -> négatif / 4★ -> neutre / 5★ -> positif
+
 
 import time
 from typing import Any
@@ -49,7 +68,13 @@ def map_stars_to_sentiment(star_label: str) -> Sentiment:
         ValueError: si `star_label` n'est pas dans le format attendu.
     """
     # TODO Tâche 3 — implémenter le mapping décrit dans `# DECISION:`.
-    raise NotImplementedError("Compléter `map_stars_to_sentiment` (Tâche 3).")
+    # raise NotImplementedError("Compléter `map_stars_to_sentiment` (Tâche 3).")
+    stars = int(star_label.split()[0])
+    if stars <= 3:
+        return "négatif"
+    if stars == 4:
+        return "neutre"
+    return "positif"
 
 
 def predict_sentiment(pipeline: Any, text: str, model_name: str) -> SentimentOut:
@@ -76,4 +101,19 @@ def predict_sentiment(pipeline: Any, text: str, model_name: str) -> SentimentOut
     #    métier : étoile la plus probable (puis `map_stars_to_sentiment`),
     #    ou somme des probabilités par groupe d'étoiles.
     # 5. Renvoyer un `SentimentOut(...)`.
-    raise NotImplementedError("Compléter `predict_sentiment` (Tâche 3).")
+    # raise NotImplementedError("Compléter `predict_sentiment` (Tâche 3).")
+
+
+    start = time.perf_counter()
+    
+    raw = pipeline(text)
+    scores_5_stars = {}
+    for item in raw[0]:
+        scores_5_stars[item['label']] = item['score']
+        
+    top_label = max(raw[0], key=lambda x: x['score'])['label']
+
+    sentiment = map_stars_to_sentiment(top_label)
+
+    duration_ms = (time.perf_counter() - start) * 1000
+    return SentimentOut(sentiment=sentiment, scores_5_stars=scores_5_stars, model_name=model_name, latence_ms=duration_ms)
