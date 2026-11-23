@@ -15,29 +15,14 @@ en argument.
 """
 from __future__ import annotations
 
-# DECISION: (à écrire avant de coder, en français)
-#   Règle retenue : ... étoiles -> négatif / ... -> neutre / ... -> positif
-#   Argument métier 1 : ...
-#   Argument métier 2 : ...
-# 
-# DECISION FFO
-# 
-# Situation : Hotel, propriétaire veut utiliser les avis client pour améliorer ses services
-# 
-# Comment les utilisateurs choisissent leur logement pour un séjour 
-# > Consultation des autres utilisateurs afin de déterminer si le lieu leur correspond
-# > Dans notre cas c'est le propriétaire qui consulte ses résultats pour ensuite les classer
-# > Les classer dans le but de régler les problèmes soulevés par les clients
-# > En partant de ce postulat, un avis 5★ peut être considéré comme 'parfait' car il y a la note maximale. et donc normalement pas de défauts à corriger
-# > Par contre un avis 4★ est certes bon mais peut permettre de soulever des petits problèmes qui persistent dans l'établissement. Des efforts minimes seront à surveiller afin de transformer ces 4★ en 5★
-# > Ensuite nous pouvons considérer que les autres avis 1★, 2★, 3★ sont eux les plus éloignés de la note parfaite et donc il y a plus d'effort a fournir de la part du propriétaire pour augmenter l'expérience client
-# > Ces trois premiers niveaux peuvent donc être considérés comme négatif par le propriétaire
-# 
-# Avec ce raisonnement on peut prévoir un très grand nombre de résultats négatifs.
-# Mais tous les avis classés comme tel auront un axe d'amélioration possible. 
-# 
-#   Règle retenue : 1★, 2★, 3★ étoiles -> négatif / 4★ -> neutre / 5★ -> positif
-
+# DECISION:
+#   Règle retenue : 1★, 2★, 3★ -> négatif / 4★ -> neutre / 5★ -> positif
+#   Argument métier 1 : Écarter les cas 5 qui sont les moins pertinents pour une amélioration des services.
+#   Argument métier 2 : Les cas neutres (4) sont quand même identifiables dans le cas où le propriétaire veux agir sur des avis proches de la perfection
+#   Argument métier 3 : Engranger un maximum d'avis négatif (1/2/3) pour cibler les différents points d'amélioration.
+#   Attention 1 : Taux de faux positif/négatif peuvent être fréquent avec les cas 3★
+#       exemple : 3★ : 0.45, 4★ : 0.35, 5★ : 0.20
+#                 Ce genre de cas est potentiellement une fausse alerte avec ce fonctionnement 
 
 import time
 from typing import Any
@@ -48,16 +33,6 @@ from app.schemas import Sentiment, SentimentOut
 def map_stars_to_sentiment(star_label: str) -> Sentiment:
     """Mappe un label 5 étoiles ('1 star', ..., '5 stars') en 3 classes métier.
 
-    À compléter par l'apprenant. **Le choix du mapping est un arbitrage
-    métier**, pas une recette imposée : plusieurs découpages sont valides
-    (cf. mini-cours `02_HuggingFace_Transformers_essentiel.md`, section
-    "Justification du seuil de mapping").
-
-    Ton travail : proposer **ton** mapping et **le justifier** dans le
-    commentaire `# DECISION:` en haut de ce fichier, puis dans
-    `rendu/<prenom>/ANALYSE.md` (coût d'un faux positif / faux négatif
-    côté métier Aubergine Hôtels).
-
     Args:
         star_label: label produit par le modèle (ex: '4 stars').
 
@@ -67,9 +42,13 @@ def map_stars_to_sentiment(star_label: str) -> Sentiment:
     Raises:
         ValueError: si `star_label` n'est pas dans le format attendu.
     """
-    # TODO Tâche 3 — implémenter le mapping décrit dans `# DECISION:`.
-    # raise NotImplementedError("Compléter `map_stars_to_sentiment` (Tâche 3).")
-    stars = int(star_label.split()[0])
+    if not isinstance(star_label, str):
+        raise ValueError("star_label doit être une chaîne de caractères.")
+    parts = star_label.split(" ", maxsplit=1)
+    if len(parts) != 2 or not parts[1]:
+        raise ValueError("star_label format invalide, espace manquant.")
+    
+    stars = int(parts[0])
     if stars <= 3:
         return "négatif"
     if stars == 4:
@@ -89,24 +68,10 @@ def predict_sentiment(pipeline: Any, text: str, model_name: str) -> SentimentOut
     Returns:
         SentimentOut avec sentiment 3 classes, scores 5★ bruts, et latence ms.
     """
-    # TODO Tâche 3 — compléter :
-    #
-    # 1. Mesurer le temps d'inférence (time.perf_counter() avant/après).
-    # 2. Appeler `raw = pipeline(text)` (sans argument en plus : le pipeline
-    #    est déjà construit avec `top_k=None` dans `main.py`). `raw` est une
-    #    liste contenant une liste de 5 dicts {'label', 'score'} : les
-    #    probabilités sont dans `raw[0]`.
-    # 3. Construire `scores_5_stars: dict[str, float]` à partir de `raw[0]`.
-    # 4. Appliquer la règle écrite dans `# DECISION:` pour obtenir la classe
-    #    métier : étoile la plus probable (puis `map_stars_to_sentiment`),
-    #    ou somme des probabilités par groupe d'étoiles.
-    # 5. Renvoyer un `SentimentOut(...)`.
-    # raise NotImplementedError("Compléter `predict_sentiment` (Tâche 3).")
-
-
     start = time.perf_counter()
-    
     raw = pipeline(text)
+    duration_ms = (time.perf_counter() - start) * 1000
+    
     scores_5_stars = {}
     for item in raw[0]:
         scores_5_stars[item['label']] = item['score']
@@ -115,5 +80,4 @@ def predict_sentiment(pipeline: Any, text: str, model_name: str) -> SentimentOut
 
     sentiment = map_stars_to_sentiment(top_label)
 
-    duration_ms = (time.perf_counter() - start) * 1000
     return SentimentOut(sentiment=sentiment, scores_5_stars=scores_5_stars, model_name=model_name, latence_ms=duration_ms)
