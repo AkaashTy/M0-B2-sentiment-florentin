@@ -4,7 +4,7 @@
 
 Analyse d'avis pour **Aubergine Hôtels** : le service classe des avis textuels
 en 3 classes (**positif**, **neutre**, **négatif**), à partir du modèle
-**DistilCamemBERT** (~270 Mo).
+**cmarkea/distilcamembert-base-sentiment** (~270 Mo).
 
 ### Architecture
 
@@ -93,6 +93,38 @@ docker compose logs -f api-nlp
 
 ## PARTIE 2 : ≥ 3 reviews mal classées + explication
 
+Voici la liste de trois reviews qui seront mal classées en utilisant ma méthode.
+
+#### Avis n°7
+
+> « Pas mauvais du tout, on s'attendait à pire vu les avis. Bonne surprise sur le rapport qualité-prix. »
+
+- **Sentiment détecté :** négatif (3★)
+- **Or** cet avis est déclaré **positif** par le sample
+- **Raison :** négation utilisée pour décrire une situation positive, pas repérée par le modèle
+
+#### Avis n°12
+
+> « On a passé un séjour qu'on n'oubliera pas. La climatisation en panne en plein août, sympa. »
+
+- **Sentiment détecté :** neutre (4★)
+- **Or** cet avis est déclaré **négatif** par le sample
+- **Raison :** sarcasme pas détecté par le modèle
+
+#### Avis n°20
+
+> « Charmant, décoration soignée, restaurant inventif. On reviendra dès que possible avec des amis. »
+
+- **Sentiment détecté :** neutre (4★)
+- **Or** cet avis est déclaré **positif** par le sample
+- **Raison :** limite de notre décision qui nous donne un faux neutre :
+
+  | 3★ | 4★ | 5★ |
+  |---|---|---|
+  | 0.09 | 0.48 | 0.42 |
+
+Voir les avis Postman : [`postman_collection.json`](./postman_collection.json)
+
 ---
 
 ## PARTIE 3 : justification du mapping
@@ -101,7 +133,9 @@ docker compose logs -f api-nlp
 
 **Situation :** hôtel, le propriétaire veut utiliser les avis clients pour améliorer ses services.
 
-**Comment les utilisateurs choisissent leur logement pour un séjour :**
+**Règle retenue :** 1★, 2★, 3★ → négatif / 4★ → neutre / 5★ → positif
+
+**Point de vue retenu :**
 
 - Consultation des autres utilisateurs afin de déterminer si le lieu leur correspond.
 - Dans notre cas, c'est le propriétaire qui consulte ses résultats pour ensuite les classer.
@@ -111,7 +145,17 @@ docker compose logs -f api-nlp
 - Ensuite, nous pouvons considérer que les autres avis 1★, 2★, 3★ sont les plus éloignés de la note parfaite, et donc qu'il y a plus d'efforts à fournir de la part du propriétaire pour améliorer l'expérience client.
 - Ces trois premiers niveaux peuvent donc être considérés comme négatifs par le propriétaire.
 
+### Conséquences
+
 Avec ce raisonnement, on peut prévoir un très grand nombre de résultats négatifs.
+Cette décision implique une **charge de travail importante** pour le propriétaire. Il est essentiel ici de se mettre d'accord avec lui sur la charge qu'il est prêt à traiter.
 Mais tous les avis classés comme tels auront un axe d'amélioration possible.
 
-**Règle retenue :** 1★, 2★, 3★ → négatif / 4★ → neutre / 5★ → positif
+Étant donné que la décision maximise le rapatriement des avis vers négatif, il faut toutefois garder en tête que certains cas fondamentalement négatifs peuvent s'échapper vers le neutre/positif.
+
+> ⚠️ Attention alors aux neutres et positifs, qui peuvent contenir des avis réellement négatifs.
+
+### Méthode : étoile la plus probable
+
+Nous prenons la décision de prendre la note la plus élevée des cinq probabilités. Car dans notre cas, les tranches 4 et 5 sont isolées et ne bénéficient pas de cette méthode. Alors que faire un choix par la somme d'un groupe (dans notre cas 1★/2★/3★) pourrait encore plus biaiser les résultats vers la réponse « négatif ».
+
