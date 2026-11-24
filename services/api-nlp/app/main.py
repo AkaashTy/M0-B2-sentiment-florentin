@@ -3,12 +3,14 @@
 Endpoints :
 - GET  /health  : statut + booléen `model_loaded`
 - GET  /info    : métadonnées modèle (classes natives, classes métier, max length)
-- POST /predict : inférence (STUB à compléter par l'apprenant)
+- POST /predict : inférence
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
+from pathlib import Path
 import sys
 from contextlib import asynccontextmanager
 from typing import Any
@@ -27,6 +29,27 @@ from app.schemas import HealthOut, InfoOut, ReviewIn, SentimentOut
 logger.remove()
 logger.add(sys.stderr, level="INFO", backtrace=False, diagnose=False)
 
+def format_json(record: dict) -> str:
+    record_extract = {
+        "heure": record["time"].isoformat(),
+        "niveau": record["level"].name,
+        "texte": record["message"],
+        "details": record["extra"],
+    }
+    record["extra"]["json"] = json.dumps(record_extract, ensure_ascii=False, default=str)
+    return "{extra[json]}\n"
+
+dirLog = Path("logs")
+dirLog.mkdir(parents=True, exist_ok=True)
+logger.add(
+    "logs/api.log",
+    rotation="5 MB",
+    retention="7 days",
+    compression="zip",
+    level="INFO",
+    enqueue=True,
+    format=format_json
+)
 
 # --- Filtre access log uvicorn : on n'affiche pas les pings healthcheck ---
 # Sans ce filtre, le healthcheck Docker (toutes les 30 s) pollue les logs
@@ -125,26 +148,21 @@ def info() -> InfoOut:
 @app.post("/predict", response_model=SentimentOut, status_code=status.HTTP_200_OK)
 def predict(payload: ReviewIn) -> SentimentOut:
     """Classifie une review FR en `négatif / neutre / positif`.
-
-    À compléter par l'apprenant — Tâche 3 du brief. Au clone, l'endpoint
-    renvoie 501 Not Implemented.
     """
-    # Pas de check `model_loaded` ici : politique fail-fast — si le pipeline
-    # ne s'est pas chargé, le conteneur a crashé au démarrage et on n'arrive
-    # jamais ici. `state["pipeline"]` est donc garanti non-None.
     if len(payload.texte) > MAX_TEXT_LENGTH:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Texte trop long (> {MAX_TEXT_LENGTH} caractères).",
         )
+    
+    prediction = inference.predict_sentiment(pipeline=state["pipeline"], text=payload.texte, model_name=MODEL_NAME)
+    
+    # Logger.info demandé au TP
+    # logger.info(f"Sentiment prédit : {prediction.sentiment}, latence: {prediction.latence_ms:.1f} ms, texte_excerpt: {payload.texte[:80]}")
+    # Bonus : utiliser un format JSON pour les logs fichier (utile en M5 si tu ingères les logs dans
+    # Grafana Loki). Indice : Loguru accepte une fonction de formatage personnalisée passée au 
+    # paramètre format=. La fonction reçoit un record (dict) et doit retourner une string.
+    logger.info("Predict : {sentiment} | latence: {latence} | texte_excerpt: {texte}", sentiment=prediction.sentiment, latence=f"{prediction.latence_ms:.1f} ms", texte=payload.texte[:80])
 
-    # TODO Tâche 3 — Appeler inference.predict_sentiment(). (logging: task 5)
-    # Pour l'instant, on signale que ce n'est pas implémenté.
-    # raise HTTPException(
-    #     status_code=status.HTTP_501_NOT_IMPLEMENTED,
-    #     detail=(
-    #         "Endpoint /predict pas encore implémenté. Voir Tâche 3 du brief "
-    #         "et `app/inference.py`."
-    #     ),
-    # )
-    return inference.predict_sentiment(pipeline=state["pipeline"], text=payload.texte, model_name=MODEL_NAME)
+    
+    return prediction
