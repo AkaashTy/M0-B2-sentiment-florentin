@@ -1,3 +1,92 @@
+# M0-B2 — Sentiment FR · Aubergine Hôtels
+
+Service NLP qui classe les avis clients d'**Aubergine Hôtels** en 3 classes métier :
+**négatif / neutre / positif**.
+
+- **Modèle** : [`cmarkea/distilcamembert-base-sentiment`](https://huggingface.co/cmarkea/distilcamembert-base-sentiment) (sortie native 5★).
+- **Mapping métier** : 1★, 2★, 3★ → négatif · 4★ → neutre · 5★ → positif (point de vue : le propriétaire cherche des axes d'amélioration).
+- **Stack `docker compose`** : `api-nlp` (FastAPI + transformers, `:8000`) et `ui-streamlit` (`:8501`), qui appelle l'API via le réseau Docker interne.
+- **Logs** : Loguru, une ligne par requête `/predict` (console + `logs/api.log` au format JSON).
+- **Tests** : pytest, 6 tests (`/health` + `/predict` : nominal, 422, paramétré sur 3 avis).
+
+📄 Analyse, schéma d'architecture et justification du mapping : [`rendu/florentin/ANALYSE.md`](./rendu/florentin/ANALYSE.md)
+📘 Guide du brief (README d'origine) : voir plus bas, après les 3 preuves.
+
+---
+
+## Lancer le projet
+
+```bash
+cp .env.example .env
+docker compose up --build -d
+```
+
+- API (Swagger) : <http://localhost:8000/docs>
+- UI : <http://localhost:8501>
+
+---
+
+## Les 3 preuves
+
+### 1. La stack tourne, `api-nlp` est `healthy`
+
+```bash
+docker compose ps
+```
+
+```
+NAME                COMMAND                  SERVICE        STATUS                   PORTS
+m0b2-api-nlp        "uvicorn app.main:ap…"   api-nlp        Up 5 minutes (healthy)   0.0.0.0:8000->8000/tcp
+m0b2-ui-streamlit   "streamlit run app.p…"   ui-streamlit   Up 5 minutes             0.0.0.0:8501->8501/tcp
+```
+
+### 2. `/predict` renvoie une classe métier
+
+```bash
+curl -X POST http://localhost:8000/predict \
+  -H 'Content-Type: application/json' \
+  -d '{"texte":"Personnel charmant, on reviendra !"}'
+```
+
+```json
+{
+  "sentiment": "positif",
+  "scores_5_stars": {
+    "5 stars": 0.5744121670722961,
+    "4 stars": 0.3713582158088684,
+    "3 stars": 0.04611707106232643,
+    "2 stars": 0.005930733866989613,
+    "1 star": 0.002181797055527568
+  },
+  "model_name": "cmarkea/distilcamembert-base-sentiment",
+  "latence_ms": 119.3121100004646
+}
+```
+
+### 3. Les tests passent dans le conteneur
+
+```bash
+docker compose exec api-nlp pytest -v
+```
+
+```
+collected 6 items
+
+tests/test_health.py::test_health_endpoint_returns_200 PASSED                [ 16%]
+tests/test_predict.py::test_predict_texte_positif_valid_200 PASSED           [ 33%]
+tests/test_predict.py::test_predict_texte_vide_invalid_422 PASSED            [ 50%]
+tests/test_predict.py::test_predict_avis_attente_200[Excellente nuit…-positif] PASSED   [ 66%]
+tests/test_predict.py::test_predict_avis_attente_200[Hôtel d'une médiocrité…-négatif] PASSED [ 83%]
+tests/test_predict.py::test_predict_avis_attente_200[Que dire à part…-positif] PASSED   [100%]
+
+============================== 6 passed in 5.01s ===============================
+```
+
+
+
+
+
+
 # M0-B2 — Squelette repo (sentiment FR · stack `docker compose`)
 
 > **Repo template GitHub.** Une seule personne par binôme clique sur
