@@ -195,7 +195,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"texte\": \"Je n'en reviens toujours pas de ce week-end, dommage qu'il soit si court !\"\n}"
+          "raw": "{\n  \"texte\": \"Je n'en reviens toujours pas de ce week-end, dommage qu'il ait été si court !\"\n}"
         },
         "url": {
           "raw": "{{base_url}}/predict",
